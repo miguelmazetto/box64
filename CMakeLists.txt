@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.4)
+cmake_minimum_required(VERSION 3.19)
 
 cmake_policy(SET CMP0065 NEW)
 
@@ -17,6 +17,7 @@ option(LARCH64 "Set to ON if targeting an Loongarch64 based device" ${LARCH64})
 option(RV64 "Set to ON if targeting an RISCV RV64G based device" ${RV64})
 option(PPC64LE "Set to ON if targeting an PowerPC 64 LE based device" ${PPC64LE})
 option(LX2160A "Set to ON if targeting an LX2160A based device" ${LX2160A})
+option(ANDROID "Set to ON if targeting an Android device" ${ANDROID})
 option(USE_CCACHE "Set to ON to use ccache if present in the system" ${USE_CCACHE})
 option(HAVE_TRACE "Set to ON to have Trace ability (needs ZydisInfo library)" ${HAVE_TRACE})
 option(NOLOADADDR "Set to ON to avoid fixing the load address of Box64" OFF)
@@ -48,6 +49,9 @@ if(RK3399 OR ODROIDN2 OR RPI4ARM64 OR RK3326 OR TEGRAX1 OR PHYTIUM OR SD845 OR L
 endif()
 if(M1 OR LARCH64)
     set(PAGE16K ON CACHE BOOL "")
+endif()
+if(ANDROID)
+    set(NOLOADADDR ON CACHE BOOL "")
 endif()
 option(LD80BITS "Set to ON if host device have 80bits long double (i.e. i386)" ${LD80BITS})
 option(NOALIGN "Set to ON if host device doesn't need re-align (i.e. i386)" ${NOALIGN})
@@ -129,6 +133,8 @@ elseif(LX2160A)
     add_definitions(-DLX2160A)
     add_definitions(-pipe -march=armv8-a+crypto+crc -mcpu=cortex-a72+crypto)
     set(CMAKE_ASM_FLAGS  "-pipe -march=armv8-a+crypto+crc -mcpu=cortex-a72+crypto")
+elseif(ANDROID)
+    add_definitions(-DANDROID)
 elseif(ARM_DYNAREC)
     set(CMAKE_ASM_FLAGS  "-pipe -march=armv8-a+crc+simd+crypto")
 endif()
@@ -247,7 +253,7 @@ set(ELFLOADER_SRC
     "${BOX64_ROOT}/src/librarian/globalsymbols.c"
     "${BOX64_ROOT}/src/librarian/symbols.c"
     "${BOX64_ROOT}/src/libtools/auxval.c"
-    "${BOX64_ROOT}/src/libtools/obstack.c"
+    #"${BOX64_ROOT}/src/libtools/obstack.c"
     "${BOX64_ROOT}/src/libtools/myalign.c"
     "${BOX64_ROOT}/src/libtools/sdl1rwops.c"
     "${BOX64_ROOT}/src/libtools/sdl2rwops.c"
@@ -263,6 +269,9 @@ set(ELFLOADER_SRC
     "${BOX64_ROOT}/src/tools/wine_tools.c"
     "${BOX64_ROOT}/src/wrapped/generated/wrapper.c"
 )
+if(NOT ANDROID)
+    list(APPEND ELFLOADER_SRC "${BOX64_ROOT}/src/libtools/obstack.c")
+endif()
 
 set(WRAPPEDS
     "${BOX64_ROOT}/src/wrapped/wrappedalure.c"
@@ -416,6 +425,11 @@ set(WRAPPEDS
     "${BOX64_ROOT}/src/wrapped/wrappedlber.c"
     "${BOX64_ROOT}/src/wrapped/wrappedvulkan.c"
 )
+if(ANDROID)
+    list(APPEND WRAPPEDS
+        "${BOX64_ROOT}/src/wrapped/wrappedandroidshmem.c"
+    )
+endif()
 
 #set(WRAPPEDS_HEAD "${BOX64_ROOT}/src/wrapped/wrappedd3dadapter9_gen.h")
 foreach(A ${WRAPPEDS})
@@ -430,7 +444,7 @@ add_custom_command(
     OUTPUT "${BOX64_ROOT}/src/wrapped/generated/functions_list.txt"
     COMMAND "${PYTHON_EXECUTABLE}" "${BOX64_ROOT}/rebuild_wrappers.py"
     "${BOX64_ROOT}"
-    "PANDORA" "HAVE_LD80BITS" "NOALIGN" "HAVE_TRACE" "--"
+    "PANDORA" "HAVE_LD80BITS" "NOALIGN" "HAVE_TRACE" "ANDROID" "--"
     ${WRAPPEDS_HEAD}
     MAIN_DEPENDENCY "${BOX64_ROOT}/rebuild_wrappers.py"
     DEPENDS ${WRAPPEDS} ${WRAPPEDS_HEAD}
@@ -548,10 +562,17 @@ set_target_properties(${BOX64} PROPERTIES ENABLE_EXPORTS ON)
 add_dependencies(${BOX64} WRAPPERS)
 #add_dependencies(${BOX64} PRINTER)
 #target_link_libraries(${BOX64} c m dl rt pthread resolv)
-if(STATICBUILD)
-    set_target_properties(${BOX64} PROPERTIES LINK_FLAGS "-static -Wl,--no-as-needed -Wl,--whole-archive -Wl,--allow-multiple-definition -lm -ldl -lrt -lpthread -lresolv -lc -Wl,-defsym,_DYNAMIC=0 -pthread")
+
+if(ANDROID)
+    set(NANDROID_LIBS "")
 else()
-    set_target_properties(${BOX64} PROPERTIES LINK_FLAGS "-Wl,--no-as-needed -lc -lm -ldl -lrt -lpthread -lresolv -Wl,--as-needed -pthread")
+    set(NANDROID_LIBS " -lrt -lpthread -lresolv")
+endif()
+
+if(STATICBUILD)
+    set_target_properties(${BOX64} PROPERTIES LINK_FLAGS "-static -Wl,--no-as-needed -Wl,--whole-archive -Wl,--allow-multiple-definition -lm -ldl${NANDROID_LIBS} -lc -Wl,-defsym,_DYNAMIC=0 -pthread")
+else()
+    set_target_properties(${BOX64} PROPERTIES LINK_FLAGS "-Wl,--no-as-needed -lc -lm -ldl${NANDROID_LIBS} -Wl,--as-needed -pthread")
 endif()
 if(DYNAREC)
     target_link_libraries(${BOX64} dynarec)

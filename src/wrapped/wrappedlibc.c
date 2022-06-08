@@ -62,7 +62,12 @@
 #include "globalsymbols.h"
 
 #define LIBNAME libc
-const char* libcName = "libc.so.6";
+const char* libcName =
+#ifdef ANDROID
+    "libc.so";
+#else
+    "libc.so.6";
+#endif
 
 typedef int (*iFi_t)(int);
 typedef int (*iFL_t)(unsigned long);
@@ -1129,13 +1134,13 @@ EXPORT void my_qsort(x64emu_t* emu, void* base, size_t nmemb, size_t size, void*
 {
     compare_r_t args;
     args.emu = emu; args.f = (uintptr_t)fnc; args.r = 0; args.data = NULL;
-    qsort_r(base, nmemb, size, (__compar_d_fn_t)my_compare_r_cb, &args);
+    qsort_r(base, nmemb, size, (void*)my_compare_r_cb, &args);
 }
 EXPORT void my_qsort_r(x64emu_t* emu, void* base, size_t nmemb, size_t size, void* fnc, void* data)
 {
     compare_r_t args;
     args.emu = emu; args.f = (uintptr_t)fnc; args.r = 1; args.data = data;
-    qsort_r(base, nmemb, size, (__compar_d_fn_t)my_compare_r_cb, &args);
+    qsort_r(base, nmemb, size, (void*)my_compare_r_cb, &args);
 }
 EXPORT void* my_bsearch(x64emu_t* emu, void* key, void* base, size_t nmemb, size_t size, void* fnc)
 {
@@ -2046,9 +2051,15 @@ EXPORT const int32_t *my___ctype_toupper;
 
 void ctSetup()
 {
+#ifdef ANDROID
+    my___ctype_b = __ctype_b_loc();
+    my___ctype_toupper = __ctype_toupper_loc();
+    my___ctype_tolower = __ctype_tolower_loc();
+#else
     my___ctype_b = *(__ctype_b_loc());
     my___ctype_toupper = *(__ctype_toupper_loc());
     my___ctype_tolower = *(__ctype_tolower_loc());
+#endif
 }
 
 EXPORT void* my___libc_stack_end;
@@ -2085,7 +2096,11 @@ typedef struct jump_buff_x64_s {
 typedef struct __jmp_buf_tag_s {
     jump_buff_x64_t __jmpbuf;
     int              __mask_was_saved;
+#ifdef ANDROID
+    sigset_t         __saved_mask;
+#else
     __sigset_t       __saved_mask;
+#endif
 } __jmp_buf_tag_t;
 
 void EXPORT my_longjmp(x64emu_t* emu, /*struct __jmp_buf_tag __env[1]*/void *p, int32_t __val)
@@ -2532,6 +2547,7 @@ EXPORT void my_mcount(void* frompc, void* selfpc)
 }
 #endif
 
+#ifndef ANDROID
 union semun {
   int              val;    /* Value for SETVAL */
   struct semid_ds *buf;    /* Buffer for IPC_STAT, IPC_SET */
@@ -2539,6 +2555,7 @@ union semun {
   struct seminfo  *__buf;  /* Buffer for IPC_INFO
                               (Linux-specific) */
 };
+#endif
 #ifndef SEM_STAT_ANY
 #define SEM_STAT_ANY 20
 #endif
@@ -2721,6 +2738,15 @@ EXPORT char my___libc_single_threaded = 0;
         lib->priv.w.lib = dlopen(NULL, RTLD_LAZY | RTLD_GLOBAL);    \
     else
 
+#ifdef ANDROID
+#define NEEDED_LIBS   0
+#else
+#define NEEDED_LIBS   3,\
+    "ld-linux-x86-64.so.2",    \
+    "libpthread.so.0",  \
+    "librt.so.1"
+#endif
+
 #define CUSTOM_INIT         \
     box64->libclib = lib;   \
     /*InitCpuModel();*/         \
@@ -2732,10 +2758,7 @@ EXPORT char my___libc_single_threaded = 0;
     my___progname = my_program_invocation_short_name =                          \
         strrchr(box64->argv[0], '/') + 1;                                       \
     getMy(lib);                                                                 \
-    setNeededLibs(lib, 3,                                              \
-        "ld-linux-x86-64.so.2",                                                 \
-        "libpthread.so.0",                                                      \
-        "librt.so.1");
+    setNeededLibs(lib, 3, NEEDED_LIBS);
 
 #define CUSTOM_FINI \
     freeMy();

@@ -921,6 +921,10 @@ uintptr_t GetLastByte(elfheader_t* h)
     return (uintptr_t)h->memory/* + h->delta*/ + h->memsz;
 }
 
+#ifdef ANDROID
+#define STB_GNU_UNIQUE 10 /* Unique symbol (GNU) */
+#endif
+
 void AddSymbols(lib_t *maplib, kh_mapsymbols_t* mapsymbols, kh_mapsymbols_t* weaksymbols, kh_mapsymbols_t* localsymbols, elfheader_t* h)
 {
     if(box64_dump && h->DynSym) DumpDynSym(h);
@@ -1224,19 +1228,24 @@ void RunElfFini(elfheader_t* h, x64emu_t *emu)
     if(!h || h->fini_done)
         return;
     h->fini_done = 1;
+#ifdef ANDROID
+    // TODO: Fix .fini_array on Android
+    printf_log(LOG_DEBUG, "Android does not support Fini for %s\n", ElfName(h));
+#else
     // first check fini array
-    Elf64_Addr *addr = (Elf64_Addr*)(h->finiarray + h->delta);
+    Elf32_Addr *addr = (Elf32_Addr*)(h->finiarray + h->delta);
     for (int i=h->finiarray_sz-1; i>=0; --i) {
-        printf_log(LOG_DEBUG, "Calling Fini[%d] for %s @%p\n", i, ElfName(h), (void*)addr[i]);
+        printf_log(LOG_DEBUG, "Calling Fini[%d] for %s %p\n", i, ElfName(h), (void*)addr[i]);
         RunFunctionWithEmu(emu, 0, (uintptr_t)addr[i], 0);
     }
     // then the "old-style" fini
     if(h->finientry) {
         uintptr_t p = h->finientry + h->delta;
-        printf_log(LOG_DEBUG, "Calling Fini for %s @%p\n", ElfName(h), (void*)p);
+        printf_log(LOG_DEBUG, "Calling Fini for %s %p\n", ElfName(h), (void*)p);
         RunFunctionWithEmu(emu, 0, p, 0);
     }
     h->init_done = 0;   // can be re-inited again...
+#endif
     return;
 }
 

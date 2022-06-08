@@ -211,7 +211,10 @@ static void initNativeLib(library_t *lib, box64context_t* context) {
                 printf_log(LOG_NONE, "Error: loading a needed libs in elf %s\n", lib->name);
                 return;
             }
-
+            #ifdef ANDROID
+            printf_log(LOG_DEBUG, "No dlinfo on Android %s\n", lib->name);
+            #define RTLD_DI_LINKMAP 2
+            #endif
             linkmap_t *lm = addLinkMapLib(lib);
             if(!lm) {
                 // Crashed already

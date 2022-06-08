@@ -426,7 +426,9 @@ GO(__fsetlocking, iFpi)
 GO(fsetpos, iFpp)
 GO(fsetpos64, iFpp)
 GO(fsetxattr, iFippLi)
-GOM(fstat, iFEip)
+//#ifndef ANDROID
+//GOM(fstat, iFEip)
+//#endif
 GOM(fstat64, iFEip)
 GOM(fstatat, iFEippi)
 GOW(fstatfs, iFip)
@@ -1104,7 +1106,9 @@ GO(__lseek, IFiIi)
 GOW(lseek, lFili)
 GOW(lseek64, lFili)
 GO(lsetxattr, iFpppLi)
-GOM(lstat, iFEpp)
+//#ifndef ANDROID
+//GOM(lstat, iFEpp)
+//#endif
 GO(lutimes, iFpp)
 GOM(__lxstat, iFEipp)
 GOM(__lxstat64, iFEipp)
@@ -1664,10 +1668,10 @@ GO(setxattr, iFpppLi)
 //GOW(sgetsgent_r, 
 GO(sgetspent, pFp)
 GOW(sgetspent_r, iFpppLp)
-GO(shmat, pFipi)
-GO(shmctl, iFiip)
-GO(shmdt, iFp)
-GO(shmget, iFiLi)
+//O(shmat, pFipi)
+//O(shmctl, iFiip)
+//O(shmdt, iFp)
+//O(shmget, iFiLi)
 GOW(shutdown, iFii)
 GOWM(__sigaction, iFEipp)
 GOWM(sigaction, iFEipp)
@@ -1733,7 +1737,9 @@ GOM(sscanf, iFEppV)
 //GOW(ssignal, @Fi@)
 //GO(sstk, 
 GOM(__stack_chk_fail, vFEv)
-GOM(stat, iFEpp)
+//#ifndef ANDROID
+//GOM(stat, iFEpp)
+//#endif
 //GO(__statfs, 
 GOW(statfs, iFpp)
 GOW(statfs64, iFpp)
@@ -2309,3 +2315,15 @@ DATAM(program_invocation_short_name, sizeof(void*))
 DATAM(__libc_single_threaded, 1)
 
 GO(iconvctl, iFlip)
+
+//#ifdef ANDROID
+GOM(__libc_init, vFEpppp)
+//OM(stat, iFpp)             //%noE
+//OM(lstat, iFpp)            //%noE
+//OM(fstat, iFip)            //%noE
+GO(__errno, pFv)
+GO(setprogname, vFp)
+GO(getprogname, pFv)
+//#include "wrappedlibpthread_private.h"
+//#include "wrappedlibrt_private.h"
+//#endif

@@ -48,6 +48,10 @@ typedef struct jump_buff_x64_s {
 	uint64_t save_reg[8];
 } jump_buff_x64_t;
 
+#ifdef ANDROID
+typedef sigset_t __sigset_t;
+#endif
+
 typedef struct __jmp_buf_tag_s {
     jump_buff_x64_t  __jmpbuf;
     int              __mask_was_saved;
@@ -65,7 +69,9 @@ typedef struct x64_unwind_buff_s {
 typedef void(*vFv_t)();
 
 KHASH_MAP_INIT_INT64(threadstack, threadstack_t*)
-KHASH_MAP_INIT_INT64(cancelthread, __pthread_unwind_buf_t*)
+#ifndef ANDROID
+KHASH_MAP_INIT_INT(cancelthread, __pthread_unwind_buf_t*)
+#endif
 
 void CleanStackSize(box64context_t* context)
 {
@@ -132,6 +138,7 @@ static void FreeCancelThread(box64context_t* context)
 	if(!context)
 		return;
 }
+#ifndef ANDROID
 static __pthread_unwind_buf_t* AddCancelThread(x64_unwind_buff_t* buff)
 {
 	__pthread_unwind_buf_t* r = (__pthread_unwind_buf_t*)calloc(1, sizeof(__pthread_unwind_buf_t));
@@ -150,6 +157,7 @@ static void DelCancelThread(x64_unwind_buff_t* buff)
 	free(r);
 	buff->__pad[3] = NULL;
 }
+#endif
 
 typedef struct emuthread_s {
 	uintptr_t 	fnc;
@@ -496,6 +504,7 @@ void* my_prepare_thread(x64emu_t *emu, void* f, void* arg, int ssize, void** pet
 
 void my_longjmp(x64emu_t* emu, /*struct __jmp_buf_tag __env[1]*/void *p, int32_t __val);
 
+#ifndef ANDROID
 #define CANCEL_MAX 8
 static __thread x64emu_t* cancel_emu[CANCEL_MAX] = {0};
 static __thread x64_unwind_buff_t* cancel_buff[CANCEL_MAX] = {0};
@@ -548,6 +557,7 @@ EXPORT void my___pthread_unwind_next(x64emu_t* emu, x64_unwind_buff_t* buff)
 	// just in case it does return
 	emu->quit = 1;
 }
+#endif
 
 KHASH_MAP_INIT_INT(once, int)
 
@@ -673,6 +683,7 @@ EXPORT int my_pthread_cond_wait(x64emu_t* emu, pthread_cond_t* cond, void* mutex
 	return pthread_cond_wait(cond, getAlignedMutex((pthread_mutex_t*)mutex));
 }
 
+#ifndef ANDROID
 EXPORT void my__pthread_cleanup_push_defer(x64emu_t* emu, void* buffer, void* routine, void* arg)
 {
     (void)emu;
@@ -729,6 +740,7 @@ EXPORT int my_pthread_setaffinity_np(x64emu_t* emu, pthread_t thread, size_t cpu
 //
 //    return ret;
 //}
+#endif
 
 EXPORT int my_pthread_kill(x64emu_t* emu, void* thread, int sig)
 {
@@ -750,6 +762,40 @@ pthread_mutex_t* getAlignedMutex(pthread_mutex_t* m) {
 	return m;
 }
 #else
+#ifdef ANDROID
+// On android, mutex might be defined diferently, so keep the old method in place there for now
+KHASH_MAP_INIT_INT(mutex, pthread_mutex_t*)
+static kh_mutex_t* unaligned_mutex = NULL;
+pthread_mutex_t* getAlignedMutex(pthread_mutex_t* m)
+{
+	if(!(((uintptr_t)m)&3))
+		return m;
+	khint_t k = kh_get(mutex, unaligned_mutex, (uintptr_t)m);
+	if(k!=kh_end(unaligned_mutex))
+		return kh_value(unaligned_mutex, k);
+	int r;
+	k = kh_put(mutex, unaligned_mutex, (uintptr_t)m, &r);
+	pthread_mutex_t* ret = kh_value(unaligned_mutex, k) = (pthread_mutex_t*)malloc(sizeof(pthread_mutex_t));
+	memcpy(ret, m, sizeof(pthread_mutex_t));
+	return ret;
+}
+EXPORT int my_pthread_mutex_destroy(pthread_mutex_t *m)
+{
+	if(!(((uintptr_t)m)&3))
+		return pthread_mutex_destroy(m);
+	khint_t k = kh_get(mutex, unaligned_mutex, (uintptr_t)m);
+	if(k!=kh_end(unaligned_mutex)) {
+		pthread_mutex_t *n = kh_value(unaligned_mutex, k);
+		kh_del(mutex, unaligned_mutex, k);
+		int ret = pthread_mutex_destroy(n);
+		free(n);
+		return ret;
+	}
+	return pthread_mutex_destroy(m);
+}
+#define getAlignedMutexWithInit(A, B)	getAlignedMutex(A)
+#else
+
 #define MUTEXES_SIZE	64
 typedef struct mutexes_block_s {
 	pthread_mutex_t mutexes[MUTEXES_SIZE];
@@ -887,6 +933,7 @@ EXPORT int my_pthread_mutex_destroy(pthread_mutex_t *m)
 	am->sign = 0;
 	return ret;
 }
+#endif	//ANDROID
 typedef union my_mutexattr_s {
 	int					x86;
 	pthread_mutexattr_t nat;
@@ -1135,7 +1182,11 @@ emu_jmpbuf_t* GetJmpBuf()
 	emu_jmpbuf_t *ejb = (emu_jmpbuf_t*)pthread_getspecific(jmpbuf_key);
 	if(!ejb) {
 		ejb = (emu_jmpbuf_t*)calloc(1, sizeof(emu_jmpbuf_t));
+#ifdef ANDROID
+		ejb->jmpbuf = calloc(1, sizeof(__jmp_buf_tag_t));
+#else
 		ejb->jmpbuf = calloc(1, sizeof(struct __jmp_buf_tag));
+#endif
 		pthread_setspecific(jmpbuf_key, ejb);
 	}
 	return ejb;
@@ -1148,6 +1199,9 @@ void init_pthread_helper()
 
 	InitCancelThread();
 	pthread_key_create(&jmpbuf_key, emujmpbuf_destroy);
+#if !defined(NOALIGN) && defined(ANDROID)
+	unaligned_mutex = kh_init(mutex);
+#endif
 }
 
 void fini_pthread_helper(box64context_t* context)
@@ -1155,8 +1209,17 @@ void fini_pthread_helper(box64context_t* context)
 	FreeCancelThread(context);
 	CleanStackSize(context);
 #ifndef NOALIGN
+#ifdef ANDROID
+	pthread_mutex_t *m;
+	kh_foreach_value(unaligned_mutex, m, 
+		pthread_mutex_destroy(m);
+		free(m);
+	);
+	kh_destroy(mutex, unaligned_mutex);
+#else
 	FreeAllMutexes(mutexes);
 	mutexes = NULL;
+#endif //!ANDROID
 #endif
 	emu_jmpbuf_t *ejb = (emu_jmpbuf_t*)pthread_getspecific(jmpbuf_key);
 	if(ejb) {

@@ -2087,6 +2087,7 @@
 #() iFEpuvvppp -> iFEpuppp
 wrappedalure:
 wrappedalut:
+wrappedandroidshmem:
 wrappedatk:
 - vFp:
   - atk_focus_tracker_init
@@ -2702,7 +2703,6 @@ wrappedlibc:
   - warn
   - warnx
 - iFip:
-  - fstat
   - fstat64
 - iFpi:
   - __sigsetjmp
@@ -2714,9 +2714,7 @@ wrappedlibc:
   - dl_iterate_phdr
   - execv
   - execvp
-  - lstat
   - sigaltstack
-  - stat
   - swapcontext
 - iFpV:
   - __isoc99_scanf
@@ -2814,6 +2812,8 @@ wrappedlibc:
   - __vsyslog_chk
 - vFpLLp:
   - qsort
+- vFpppp:
+  - __libc_init
 - iFiiip:
   - epoll_ctl
 - iFiiiN:

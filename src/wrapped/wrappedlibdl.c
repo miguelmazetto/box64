@@ -48,7 +48,13 @@ void* my_dlvsym(x64emu_t* emu, void *handle, void *symbol, const char *vername) 
 int my_dlinfo(x64emu_t* emu, void* handle, int request, void* info) EXPORT;
 
 #define LIBNAME libdl
-const char* libdlName = "libdl.so.2";
+const char* libdlName =
+#ifdef ANDROID
+    "libdl.so"
+#else
+    "libdl.so.2"
+#endif
+    ;
 
 #define CLEARERR    if(dl->last_error) free(dl->last_error); dl->last_error = NULL;
 
@@ -368,6 +374,12 @@ int my_dlclose(x64emu_t* emu, void *handle)
     }
     return 0;
 }
+#ifndef RTLD_DL_SYMENT
+#define RTLD_DL_SYMENT 1
+#endif
+#ifndef RTLD_DL_LINKMAP
+#define RTLD_DL_LINKMAP 2
+#endif
 int my_dladdr1(x64emu_t* emu, void *addr, void *i, void** extra_info, int flags)
 {
     //int dladdr(void *addr, Dl_info *info);
