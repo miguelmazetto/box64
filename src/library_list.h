@@ -3,9 +3,9 @@
 #endif
 
 #ifdef ANDROID
-#define notandroid(code) code
-#else
 #define notandroid(code)
+#else
+#define notandroid(code) code
 #endif
 
 notandroid(GO("libc.so.6", libc))
