@@ -68,6 +68,9 @@ const char* libcName =
 #else
     "libc.so.6";
 #endif
+#ifdef ANDROID
+#include "android/posix_spawn.h"
+#endif
 
 typedef int (*iFi_t)(int);
 typedef int (*iFL_t)(unsigned long);

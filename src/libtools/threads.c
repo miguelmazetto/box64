@@ -29,8 +29,6 @@
 #include "dynablock.h"
 #endif
 
-//void _pthread_cleanup_push_defer(void* buffer, void* routine, void* arg);	// declare hidden functions
-//void _pthread_cleanup_pop_restore(void* buffer, int exec);
 typedef void (*vFppp_t)(void*, void*, void*);
 typedef void (*vFpi_t)(void*, int);
 static vFppp_t real_pthread_cleanup_push_defer = NULL;
@@ -338,108 +336,6 @@ EXPORT int my_pthread_attr_setstacksize(x64emu_t* emu, void* attr, size_t stacks
 	return pthread_attr_setstacksize(getAlignedAttr(attr), stacksize);
 }
 
-#ifndef NOALIGN
-EXPORT int my_pthread_attr_getdetachstate(x64emu_t* emu, pthread_attr_t* attr, int *state)
-{
-	(void)emu;
-	return pthread_attr_getdetachstate(getAlignedAttr(attr), state);
-}
-EXPORT int my_pthread_attr_getguardsize(x64emu_t* emu, pthread_attr_t* attr, size_t* size)
-{
-	(void)emu;
-	return pthread_attr_getguardsize(getAlignedAttr(attr), size);
-}
-EXPORT int my_pthread_attr_getinheritsched(x64emu_t* emu, pthread_attr_t* attr, int* sched)
-{
-	(void)emu;
-	return pthread_attr_getinheritsched(getAlignedAttr(attr), sched);
-}
-EXPORT int my_pthread_attr_getschedparam(x64emu_t* emu, pthread_attr_t* attr, void* param)
-{
-	(void)emu;
-	return pthread_attr_getschedparam(getAlignedAttr(attr), param);
-}
-EXPORT int my_pthread_attr_getschedpolicy(x64emu_t* emu, pthread_attr_t* attr, int* policy)
-{
-	(void)emu;
-	return pthread_attr_getschedpolicy(getAlignedAttr(attr), policy);
-}
-EXPORT int my_pthread_attr_getscope(x64emu_t* emu, pthread_attr_t* attr, int* scope)
-{
-	(void)emu;
-	return pthread_attr_getscope(getAlignedAttr(attr), scope);
-}
-EXPORT int my_pthread_attr_getstackaddr(x64emu_t* emu, pthread_attr_t* attr, void* addr)
-{
-	(void)emu;
-	size_t size;
-	return pthread_attr_getstack(getAlignedAttr(attr), addr, &size);
-	//return pthread_attr_getstackaddr(getAlignedAttr(attr), addr);
-}
-EXPORT int my_pthread_attr_getstacksize(x64emu_t* emu, pthread_attr_t* attr, size_t* size)
-{
-	(void)emu;
-	void* addr;
-	int ret = pthread_attr_getstack(getAlignedAttr(attr), &addr, size);
-	if(!*size)
-		*size = 2*1024*1024;
-	//return pthread_attr_getstacksize(getAlignedAttr(attr), size);
-	return ret;
-}
-EXPORT int my_pthread_attr_init(x64emu_t* emu, pthread_attr_t* attr)
-{
-	(void)emu;
-	return pthread_attr_init(getAlignedAttrWithInit(attr, 0));
-}
-EXPORT int my_pthread_attr_setaffinity_np(x64emu_t* emu, pthread_attr_t* attr, size_t cpusize, void* cpuset)
-{
-	(void)emu;
-	return pthread_attr_setaffinity_np(getAlignedAttr(attr), cpusize, cpuset);
-}
-EXPORT int my_pthread_attr_setdetachstate(x64emu_t* emu, pthread_attr_t* attr, int state)
-{
-	(void)emu;
-	return pthread_attr_setdetachstate(getAlignedAttr(attr), state);
-}
-EXPORT int my_pthread_attr_setguardsize(x64emu_t* emu, pthread_attr_t* attr, size_t size)
-{
-	(void)emu;
-	return pthread_attr_setguardsize(getAlignedAttr(attr), size);
-}
-EXPORT int my_pthread_attr_setinheritsched(x64emu_t* emu, pthread_attr_t* attr, int sched)
-{
-	(void)emu;
-	return pthread_attr_setinheritsched(getAlignedAttr(attr), sched);
-}
-EXPORT int my_pthread_attr_setschedparam(x64emu_t* emu, pthread_attr_t* attr, void* param)
-{
-	(void)emu;
-	return pthread_attr_setschedparam(getAlignedAttr(attr), param);
-}
-EXPORT int my_pthread_attr_setschedpolicy(x64emu_t* emu, pthread_attr_t* attr, int policy)
-{
-	(void)emu;
-	return pthread_attr_setschedpolicy(getAlignedAttr(attr), policy);
-}
-EXPORT int my_pthread_attr_setscope(x64emu_t* emu, pthread_attr_t* attr, int scope)
-{
-	(void)emu;
-	return pthread_attr_setscope(getAlignedAttr(attr), scope);
-}
-EXPORT int my_pthread_attr_setstackaddr(x64emu_t* emu, pthread_attr_t* attr, void* addr)
-{
-	size_t size = 2*1024*1024;
-	my_pthread_attr_getstacksize(emu, attr, &size);
-	return pthread_attr_setstack(getAlignedAttr(attr), addr, size);
-	//return pthread_attr_setstackaddr(getAlignedAttr(attr), addr);
-}
-EXPORT int my_pthread_getattr_np(x64emu_t* emu, pthread_t thread_id, pthread_attr_t* attr)
-{
-	(void)emu;
-	return pthread_getattr_np(thread_id, getAlignedAttrWithInit(attr, 0));
-}
-#endif
-
 EXPORT int my_pthread_create(x64emu_t *emu, void* t, void* attr, void* start_routine, void* arg)
 {
 	int stacksize = 2*1024*1024;	//default stack size is 2Mo
@@ -494,9 +390,11 @@ void* my_prepare_thread(x64emu_t *emu, void* f, void* arg, int ssize, void** pet
 	et->fnc = (uintptr_t)f;
 	et->arg = arg;
 	#ifdef DYNAREC
-	// pre-creation of the JIT code for the entry point of the thread
-	dynablock_t *current = NULL;
-	DBGetBlock(emu, (uintptr_t)f, 1, &current);
+	if(box64_dynarec) {
+		// pre-creation of the JIT code for the entry point of the thread
+		dynablock_t *current = NULL;
+		DBGetBlock(emu, (uintptr_t)f, 1, &current);
+	}
 	#endif
 	*pet =  et;
 	return pthread_routine;
@@ -530,7 +428,7 @@ EXPORT void my___pthread_register_cancel(void* E, void* B)
 		int i = cancel_deep--;
 		x64emu_t* emu = cancel_emu[i];
 		my_longjmp(emu, cancel_buff[i]->__cancel_jmp_buf, 1);
-		DynaRun(emu);	// resume execution // TODO: Use ejb instead?
+		DynaRun(emu);	// resume execution
 		return;
 	}
 
@@ -710,36 +608,51 @@ EXPORT void my__pthread_cleanup_pop(x64emu_t* emu, void* buffer, int exec)
 
 EXPORT int my_pthread_getaffinity_np(x64emu_t* emu, pthread_t thread, size_t cpusetsize, void* cpuset)
 {
-	(void)emu;
+	if(cpusetsize>0x1000) {
+		// probably old version of the function, that didn't have cpusetsize....
+		cpuset = (void*)cpusetsize;
+		cpusetsize = sizeof(cpu_set_t);
+	} 
+
 	int ret = pthread_getaffinity_np(thread, cpusetsize, cpuset);
 	if(ret<0) {
-		printf_log(LOG_INFO, "Warning, pthread_getaffinity_np(%p, %zd, %p) errored, with errno=%d\n", (void*)thread, cpusetsize, cpuset, errno);
+		printf_log(LOG_INFO, "Warning, pthread_getaffinity_np(%p, %d, %p) errored, with errno=%d\n", (void*)thread, cpusetsize, cpuset, errno);
 	}
 
     return ret;
 }
 
-EXPORT int my_pthread_setaffinity_np(x64emu_t* emu, pthread_t thread, size_t cpusetsize, void* cpuset)
+EXPORT int my_pthread_setaffinity_np(x64emu_t* emu, pthread_t thread, int cpusetsize, void* cpuset)
 {
-	(void)emu;
+	if(cpusetsize>0x1000) {
+		// probably old version of the function, that didn't have cpusetsize....
+		cpuset = (void*)cpusetsize;
+		cpusetsize = sizeof(cpu_set_t);
+	} 
+
 	int ret = pthread_setaffinity_np(thread, cpusetsize, cpuset);
 	if(ret<0) {
-		printf_log(LOG_INFO, "Warning, pthread_setaffinity_np(%p, %zd, %p) errored, with errno=%d\n", (void*)thread, cpusetsize, cpuset, errno);
+		printf_log(LOG_INFO, "Warning, pthread_setaffinity_np(%p, %d, %p) errored, with errno=%d\n", (void*)thread, cpusetsize, cpuset, errno);
 	}
 
     return ret;
 }
 
-//EXPORT int my_pthread_attr_setaffinity_np(x64emu_t* emu, void* attr, uint32_t cpusetsize, void* cpuset)
-//{
-//	(void)emu;
-//	int ret = pthread_attr_setaffinity_np(attr, cpusetsize, cpuset);
-//	if(ret<0) {
-//		printf_log(LOG_INFO, "Warning, pthread_attr_setaffinity_np(%p, %d, %p) errored, with errno=%d\n", attr, cpusetsize, cpuset, errno);
-//	}
-//
-//    return ret;
-//}
+EXPORT int my_pthread_attr_setaffinity_np(x64emu_t* emu, void* attr, uint32_t cpusetsize, void* cpuset)
+{
+	if(cpusetsize>0x1000) {
+		// probably old version of the function, that didn't have cpusetsize....
+		cpuset = (void*)cpusetsize;
+		cpusetsize = sizeof(cpu_set_t);
+	} 
+
+	int ret = pthread_attr_setaffinity_np(attr, cpusetsize, cpuset);
+	if(ret<0) {
+		printf_log(LOG_INFO, "Warning, pthread_attr_setaffinity_np(%p, %d, %p) errored, with errno=%d\n", attr, cpusetsize, cpuset, errno);
+	}
+
+    return ret;
+}
 #endif
 
 EXPORT int my_pthread_kill(x64emu_t* emu, void* thread, int sig)
@@ -753,7 +666,7 @@ EXPORT int my_pthread_kill(x64emu_t* emu, void* thread, int sig)
 
 //EXPORT void my_pthread_exit(x64emu_t* emu, void* retval)
 //{
-//	(void)emu;
+//	emu->quit = 1;	// to be safe
 //	pthread_exit(retval);
 //}
 
@@ -939,86 +852,6 @@ typedef union my_mutexattr_s {
 	pthread_mutexattr_t nat;
 } my_mutexattr_t;
 // mutexattr
-EXPORT int my_pthread_mutexattr_destroy(x64emu_t* emu, my_mutexattr_t *attr)
-{
-	my_mutexattr_t mattr = {0};
-	mattr.x86 = attr->x86;
-	int ret = pthread_mutexattr_destroy(&mattr.nat);
-	attr->x86 = mattr.x86;
-	return ret;
-}
-EXPORT int my___pthread_mutexattr_destroy(x64emu_t* emu, my_mutexattr_t *attr) __attribute__((alias("my_pthread_mutexattr_destroy")));
-EXPORT int my_pthread_mutexattr_getkind_np(x64emu_t* emu, my_mutexattr_t *attr, void* p)
-{
-	my_mutexattr_t mattr = {0};
-	mattr.x86 = attr->x86;
-	//int ret = pthread_mutexattr_getkind_np(&mattr.nat, p);
-	int ret = pthread_mutexattr_gettype(&mattr.nat, p);
-	attr->x86 = mattr.x86;
-	return ret;
-}
-EXPORT int my_pthread_mutexattr_getprotocol(x64emu_t* emu, my_mutexattr_t *attr, void* p)
-{
-	my_mutexattr_t mattr = {0};
-	mattr.x86 = attr->x86;
-	int ret = pthread_mutexattr_getprotocol(&mattr.nat, p);
-	attr->x86 = mattr.x86;
-	return ret;
-}
-EXPORT int my_pthread_mutexattr_gettype(x64emu_t* emu, my_mutexattr_t *attr, void* p)
-{
-	my_mutexattr_t mattr = {0};
-	mattr.x86 = attr->x86;
-	int ret = pthread_mutexattr_gettype(&mattr.nat, p);
-	attr->x86 = mattr.x86;
-	return ret;
-}
-EXPORT int my_pthread_mutexattr_init(x64emu_t* emu, my_mutexattr_t *attr)
-{
-	my_mutexattr_t mattr = {0};
-	mattr.x86 = attr->x86;
-	int ret = pthread_mutexattr_init(&mattr.nat);
-	attr->x86 = mattr.x86;
-	return ret;
-}
-EXPORT int my___pthread_mutexattr_init(x64emu_t* emu, my_mutexattr_t *attr) __attribute__((alias("my_pthread_mutexattr_init")));
-EXPORT int my_pthread_mutexattr_setkind_np(x64emu_t* emu, my_mutexattr_t *attr, int k)
-{
-	my_mutexattr_t mattr = {0};
-	mattr.x86 = attr->x86;
-	//int ret = pthread_mutexattr_setkind_np(&mattr.nat, k);
-	int ret = pthread_mutexattr_settype(&mattr.nat, k);
-	attr->x86 = mattr.x86;
-	return ret;
-}
-EXPORT int my_pthread_mutexattr_setprotocol(x64emu_t* emu, my_mutexattr_t *attr, int p)
-{
-	my_mutexattr_t mattr = {0};
-	mattr.x86 = attr->x86;
-	int ret = pthread_mutexattr_setprotocol(&mattr.nat, p);
-	attr->x86 = mattr.x86;
-	return ret;
-}
-EXPORT int my_pthread_mutexattr_setpshared(x64emu_t* emu, my_mutexattr_t *attr, int p)
-{
-	my_mutexattr_t mattr = {0};
-	mattr.x86 = attr->x86;
-	int ret = pthread_mutexattr_setpshared(&mattr.nat, p);
-	attr->x86 = mattr.x86;
-	return ret;
-}
-EXPORT int my_pthread_mutexattr_settype(x64emu_t* emu, my_mutexattr_t *attr, int t)
-{
-	my_mutexattr_t mattr = {0};
-	mattr.x86 = attr->x86;
-	int ret = pthread_mutexattr_settype(&mattr.nat, t);
-	attr->x86 = mattr.x86;
-	return ret;
-}
-EXPORT int my___pthread_mutexattr_settype(x64emu_t* emu, my_mutexattr_t *attr, int t) __attribute__((alias("my_pthread_mutexattr_settype")));
-
-// mutex
-int my___pthread_mutex_destroy(pthread_mutex_t *m) __attribute__((alias("my_pthread_mutex_destroy")));
 
 EXPORT int my_pthread_mutex_init(pthread_mutex_t *m, my_mutexattr_t *att)
 {
@@ -1039,130 +872,19 @@ EXPORT int my_pthread_mutex_timedlock(pthread_mutex_t *m, const struct timespec 
 {
 	return pthread_mutex_timedlock(getAlignedMutex(m), t);
 }
-EXPORT int my___pthread_mutex_trylock(pthread_mutex_t *m, const struct timespec * t) __attribute__((alias("my_pthread_mutex_timedlock")));
+EXPORT int my___pthread_mutex_timedlock(pthread_mutex_t *m, const struct timespec * t) __attribute__((alias("my_pthread_mutex_timedlock")));
 
 EXPORT int my_pthread_mutex_trylock(pthread_mutex_t *m)
 {
 	return pthread_mutex_trylock(getAlignedMutex(m));
 }
-EXPORT int my___pthread_mutex_unlock(pthread_mutex_t *m) __attribute__((alias("my_pthread_mutex_trylock")));
+EXPORT int my___pthread_mutex_trylock(pthread_mutex_t *m) __attribute__((alias("my_pthread_mutex_trylock")));
 
 EXPORT int my_pthread_mutex_unlock(pthread_mutex_t *m)
 {
 	return pthread_mutex_unlock(getAlignedMutex(m));
 }
-
-typedef union my_condattr_s {
-	int					x86;
-	pthread_condattr_t 	nat;
-} my_condattr_t;
-// condattr
-EXPORT int my_pthread_condattr_destroy(x64emu_t* emu, my_condattr_t* c)
-{
-	my_condattr_t cond = {0};
-	cond.x86 = c->x86;
-	int ret = pthread_condattr_destroy(&cond.nat);
-	c->x86 = cond.x86;
-	return ret;
-}
-EXPORT int my_pthread_condattr_getclock(x64emu_t* emu, my_condattr_t* c, void* cl)
-{
-	my_condattr_t cond = {0};
-	cond.x86 = c->x86;
-	int ret = pthread_condattr_getclock(&cond.nat, cl);
-	c->x86 = cond.x86;
-	return ret;
-}
-EXPORT int my_pthread_condattr_getpshared(x64emu_t* emu, my_condattr_t* c, void* p)
-{
-	my_condattr_t cond = {0};
-	cond.x86 = c->x86;
-	int ret = pthread_condattr_getpshared(&cond.nat, p);
-	c->x86 = cond.x86;
-	return ret;
-}
-EXPORT int my_pthread_condattr_init(x64emu_t* emu, my_condattr_t* c)
-{
-	my_condattr_t cond = {0};
-	cond.x86 = c->x86;
-	int ret = pthread_condattr_init(&cond.nat);
-	c->x86 = cond.x86;
-	return ret;
-}
-EXPORT int my_pthread_condattr_setclock(x64emu_t* emu, my_condattr_t* c, int cl)
-{
-	my_condattr_t cond = {0};
-	cond.x86 = c->x86;
-	int ret = pthread_condattr_setclock(&cond.nat, cl);
-	c->x86 = cond.x86;
-	return ret;
-}
-EXPORT int my_pthread_condattr_setpshared(x64emu_t* emu, my_condattr_t* c, int p)
-{
-	my_condattr_t cond = {0};
-	cond.x86 = c->x86;
-	int ret = pthread_condattr_setpshared(&cond.nat, p);
-	c->x86 = cond.x86;
-	return ret;
-}
-EXPORT int my_pthread_cond_init(x64emu_t* emu, pthread_cond_t *pc, my_condattr_t* c)
-{
-	my_condattr_t cond = {0};
-	if(c)
-		cond.x86 = c->x86;
-	int ret = pthread_cond_init(pc, c?(&cond.nat):NULL);
-	if(c)
-		c->x86 = cond.x86;
-	return ret;
-}
-
-typedef union my_barrierattr_s {
-	int						x86;
-	pthread_barrierattr_t 	nat;
-} my_barrierattr_t;
-// barrierattr
-EXPORT int my_pthread_barrierattr_destroy(x64emu_t* emu, my_barrierattr_t* b)
-{
-	my_barrierattr_t battr = {0};
-	battr.x86 = b->x86;
-	int ret = pthread_barrierattr_destroy(&battr.nat);
-	b->x86 = battr.x86;
-	return ret;
-}
-EXPORT int my_pthread_barrierattr_getpshared(x64emu_t* emu, my_barrierattr_t* b, void* p)
-{
-	my_barrierattr_t battr = {0};
-	battr.x86 = b->x86;
-	int ret = pthread_barrierattr_getpshared(&battr.nat, p);
-	b->x86 = battr.x86;
-	return ret;
-}
-EXPORT int my_pthread_barrierattr_init(x64emu_t* emu, my_barrierattr_t* b)
-{
-	my_barrierattr_t battr = {0};
-	battr.x86 = b->x86;
-	int ret = pthread_barrierattr_init(&battr.nat);
-	b->x86 = battr.x86;
-	return ret;
-}
-EXPORT int my_pthread_barrierattr_setpshared(x64emu_t* emu, my_barrierattr_t* b, int p)
-{
-	my_barrierattr_t battr = {0};
-	battr.x86 = b->x86;
-	int ret = pthread_barrierattr_setpshared(&battr.nat, p);
-	b->x86 = battr.x86;
-	return ret;
-}
-EXPORT int my_pthread_barrier_init(x64emu_t* emu, pthread_barrier_t* bar, my_barrierattr_t* b, uint32_t count)
-{
-	my_barrierattr_t battr = {0};
-	if(b)
-		battr.x86 = b->x86;
-	int ret = pthread_barrier_init(bar, b?(&battr.nat):NULL, count);
-	if(b)
-		b->x86 = battr.x86;
-	return ret;
-}
+EXPORT int my___pthread_mutex_unlock(pthread_mutex_t *m) __attribute__((alias("my_pthread_mutex_unlock")));
 
 #endif
 

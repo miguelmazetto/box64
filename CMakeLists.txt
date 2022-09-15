@@ -77,6 +77,10 @@ endif()
 
 project(box64 C ASM)
 
+if(ANDROID)
+    add_subdirectory(src/android)
+endif()
+
 enable_testing()
 
 set(default_build_type "RelWithDebInfo")
@@ -564,7 +568,8 @@ add_dependencies(${BOX64} WRAPPERS)
 #target_link_libraries(${BOX64} c m dl rt pthread resolv)
 
 if(ANDROID)
-    set(NANDROID_LIBS "")
+    set(NANDROID_LIBS)
+    target_link_libraries(${BOX64} androidpoly)
 else()
     set(NANDROID_LIBS " -lrt -lpthread -lresolv")
 endif()

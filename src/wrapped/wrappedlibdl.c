@@ -19,6 +19,10 @@
 #include "elfloader.h"
 #include "elfs/elfloader_private.h"
 
+#ifdef ANDROID
+#include "android/posix_spawn.h"
+#endif
+
 typedef struct dlprivate_s {
     library_t   **libs;
     size_t      *count;
